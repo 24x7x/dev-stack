@@ -1,0 +1,13 @@
+# Docker Compose
+docker-compose.override.yml
+docker-compose.*.yml
+*.env
+
+# macOS-specific files
+.DS_Store
+
+# Container Data
+kafka_data/
+mongo_data/
+mysql_data/
+postgres_data/
