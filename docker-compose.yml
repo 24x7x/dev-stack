@@ -1,157 +1,84 @@
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:${ZOOKEEPER_IMAGE_VERSION}
-    container_name: zookeeper
-    restart: always
-    ports:
-      - "2181:2181"
-    env_file:
-      - .env
-    environment:
-      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT}
-      ZOOKEEPER_TICK_TIME: ${ZOOKEEPER_TICK_TIME}
-    networks:
-      - kafka_network
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "${ZOOKEEPER_CLIENT_PORT}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   kafka:
-    image: confluentinc/cp-kafka:${KAFKA_IMAGE_VERSION}
+    image: bitnami/kafka:${KAFKA_VERSION}
     container_name: kafka
-    restart: always
-    depends_on:
-      zookeeper:
-        condition: service_healthy
     ports:
       - "9092:9092"
+    environment:
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_DOCKER://:29092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_DOCKER://kafka:29092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_DOCKER:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_BROKER_ID: 1
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - kafka_data:/bitnami/kafka
     env_file:
       - .env
-    environment:
-      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
-      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
-      KAFKA_INTER_BROKER_LISTENER_NAME: ${KAFKA_INTER_BROKER_LISTENER_NAME}
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
-      KAFKA_LISTENERS: ${KAFKA_LISTENERS}
-      KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
-    volumes:
-      - ./kafka_data:/var/lib/kafka/data
-    networks:
-      - kafka_network
-    healthcheck:
-      test: ["CMD", "kafka-topics", "--list", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:${KAFKA_UI_IMAGE_VERSION}
+    image: provectuslabs/kafka-ui:${KAFKA_UI_VERSION}
     container_name: kafka-ui
-    restart: always
-    depends_on:
-      kafka:
-        condition: service_healthy
     ports:
       - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      - kafka
     env_file:
       - .env
-    environment:
-      DYNAMIC_CONFIG_ENABLED: "true"
-      KAFKA_CLUSTERS_0_NAME: ${KAFKA_CLUSTERS_0_NAME}
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: ${KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS}
-      KAFKA_CLUSTERS_0_ZOOKEEPER: ${KAFKA_ZOOKEEPER_CONNECT}
-      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: ${KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL}
-    networks:
-      - kafka_network
 
   mongodb:
-    image: mongo:${MONGO_IMAGE_VERSION}
+    image: mongo:${MONGO_VERSION}
     container_name: mongodb
-    restart: always
     ports:
       - "27017:27017"
-    env_file:
-      - .env
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
     volumes:
-      - ./mongo_data:/data/db
-      - ./seed_data/mongodb:/seed
-    networks:
-      - database_network
-    healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.runCommand({ ping: 1 })"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  mongo-import:
-    image: mongo:${MONGO_IMAGE_VERSION}
-    container_name: mongo-import
-    depends_on:
-      mongodb:
-        condition: service_healthy
+      - mongo_data:/data/db
     env_file:
       - .env
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-    volumes:
-      - ./init_data/mongodb:/mongo_import
-    entrypoint: ["bash", "/mongo_import/mongo_import.sh"]
-    networks:
-      - database_network
 
   mysql:
-    image: mysql:${MYSQL_IMAGE_VERSION}
+    image: mysql:${MYSQL_VERSION}
     container_name: mysql
-    restart: always
     ports:
       - "3306:3306"
-    env_file:
-      - .env
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - ./mysql_data:/var/lib/mysql
-    networks:
-      - database_network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  postgresql:
-    image: postgres:${POSTGRES_IMAGE_VERSION}
-    container_name: postgresqld
-    restart: always
-    ports:
-      - "5432:5432"
+      - mysql_data:/var/lib/mysql
     env_file:
       - .env
+
+  postgresql:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: postgresql
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
-    networks:
-      - database_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
 
-networks:
-  kafka_network:
-    driver: bridge
-  database_network:
-    driver: bridge
+volumes:
+  kafka_data:
+  mongo_data:
+  mysql_data:
+  postgres_data:
